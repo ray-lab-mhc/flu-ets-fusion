@@ -1,0 +1,202 @@
+---
+title: "Flu_forecasting 2"
+author: "Minh Tam Hoang"
+date: "6/25/2019"
+output: html_document
+---
+Note: please embed functions that are required to run the codes below in the document if you want to knit this file.
+
+Flu forecasting results for the analysis of multivariate times series that only include wili_ny_upstate and wili_jfk. VAR and VARMA models are utilized to predict the behaviour of flu in the next four weeks. Since cross-validations for VARMA models take a significant amount of time to return the results, I only comment out which VARMA models are recommended based on Ljung-Box statistics. 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r, include=TRUE}
+library(dplyr)
+library(forecast)
+library(smooth)
+library(MTS)
+library(urca)
+library(tidyverse)
+flu_data <- readRDS("data/ny_flu_wiki.rds")
+wili_ts1 <- cbind.data.frame(flu_data[,4], flu_data[,5])
+wili_flu_ts <- ts(wili_ts1, start = c(2010, 40), frequency = 52)
+autoplot(wili_flu_ts)
+```
+```{r, include=TRUE}
+wili_flu_ts%>% diff(lag = 52) -> wili_flu_s
+wili_flu_s %>% ur.kpss()%>% summary()
+wili_stimulate <- Eccm(wili_flu_s, maxp = 5, maxq = 6)
+VARorder(wili_flu_s,maxp = 5)
+```
+Since seasonality exist in the series with a frequency of 52, seasonal difference is applied first.
+
+Based on results from Unit Root Test to determine, the series now is stationary.
+Another differencing is not necessary.
+
+p-values from table of Extended Cross-correlation Matrices suggest a VAR(2), VAR(3), and VAR(4). Other possible choices include VARMA(2,1) and VARMA(1,2).
+First, fit a VAR(3) model for seasonally differenced data (lag = 52)
+
+```{r, include=TRUE}
+wili_fit1 <- VAR(wili_flu_s, p = 3)
+
+wili_fc_1 <- VARpred(wili_fit1, h = 4)
+invert_fc(wili_fc_1$pred, wili_flu_ts, freq = 52, h = 4)->wili_fc1
+print("The forecasted values are ")
+print(wili_fc1)
+CI_function(wili_fc_1$pred, wili_fc_1$se.err,h = 4, ts_frequency = 52, wili_flu_ts, lambda = 37)
+
+wili_CV_rmse1 <- list()
+for ( i in 1:4){
+  cross_valid(wili_flu_ts, window = 156, h = i, val_p = 3, val_q = 0, freq = 52, lamb = 37)-> wili_cv_rmse
+  wili_CV_rmse1[[i]] <- wili_cv_rmse
+}
+for (i in 1:4){
+  print("Cross-validated RMSE for forecast horizon ")
+  print(i)
+  names(wili_CV_rmse1[[i]]) <- c("wili_jfk", "wili_ny_upstate")
+  print(unlist(wili_CV_rmse1[[i]]))
+}
+```
+First, fit a VAR(4) model for seasonally differenced data (lag = 52)
+```{r, include=TRUE}
+wili_fit2 <- VAR(wili_flu_s, p = 4)
+
+wili_fc_2 <- VARpred(wili_fit2, h = 4)
+invert_fc(wili_fc_2$pred, wili_flu_ts, freq = 52, h = 4)->wili_fc2
+print("The forecasted values are ")
+print(wili_fc2)
+CI_function(wili_fc_2$pred, wili_fc_2$se.err,h = 4, ts_frequency = 52, wili_flu_ts, lambda = 37)
+
+wili_CV_rmse2 <- list()
+for ( i in 1:4){
+  cross_valid(wili_flu_ts, window = 156, h = i, val_p = 4, val_q = 0, freq = 52, lamb = 37)-> wili_cv_rmse
+  wili_CV_rmse2[[i]] <- wili_cv_rmse
+}
+for (i in 1:4){
+  print("Cross-validated RMSE for forecast horizon ")
+  print(i)
+  names(wili_CV_rmse2[[i]]) <- c("wili_jfk", "wili_ny_upstate")
+  print(unlist(wili_CV_rmse2[[i]]))
+}
+```
+
+
+As the data show the variation that seasonally fluctuates with the seasonality of time series, log transformation is applied right before seasonally difference.< To stablize the variance and linearize the fit>
+
+```{r, include=TRUE}
+wili_transformed <- BoxCox(wili_flu_ts, lambda = 0)
+wili_transformed %>% diff(lag = 52)-> wili_ts_trans
+wili_guess <- Eccm(wili_ts_trans, maxp = 5, maxq = 6)
+VARorder(wili_ts_trans,maxp = 5)
+```
+
+
+According to p-values from two-way table, possible choices inlude VAR(3) and VAR(4). VAR(2) and VAR(2,3) may be options, too.
+```{r, include=TRUE}
+wili_fit3 <- VAR(wili_ts_trans, p = 3)
+
+wili_fc_3 <- VARpred(wili_fit3, h = 4)
+invert_fc(wili_fc_3$pred, wili_transformed, freq = 52, h = 4)->wili_fc3
+print("The forecasted values are ")
+print(InvBoxCox(wili_fc3, lambda = 0))
+CI_function(wili_fc_3$pred, wili_fc_3$se.err,h = 4, ts_frequency = 52, wili_flu_ts, lambda = 0)
+
+wili_CV_rmse3 <- list()
+for ( i in 1:4){
+  cross_valid(wili_flu_ts, window = 156, h = i, val_p = 3, val_q = 0, freq = 52, lamb = 0)-> wili_cv_rmse
+  wili_CV_rmse3[[i]] <- wili_cv_rmse
+}
+for (i in 1:4){
+  print("Cross-validated RMSE for forecast horizon ")
+  print(i)
+  names(wili_CV_rmse3[[i]]) <- c("wili_jfk", "wili_ny_upstate")
+  print(unlist(wili_CV_rmse3[[i]]))
+}
+```
+VAR(4):
+
+
+
+```{r, include=TRUE}
+wili_fit4 <- VAR(wili_ts_trans, p = 4)
+
+wili_fc_4 <- VARpred(wili_fit4, h = 4)
+invert_fc(wili_fc_4$pred, wili_transformed, freq = 52, h = 4)->wili_fc4
+print("The forecasted values are ")
+print(InvBoxCox(wili_fc4, lambda = 0))
+CI_function(wili_fc_4$pred, wili_fc_4$se.err,h = 4, ts_frequency = 52, wili_flu_ts, lambda = 0)
+
+wili_CV_rmse4 <- list()
+for ( i in 1:4){
+  cross_valid(wili_flu_ts, window = 156, h = i, val_p = 4, val_q = 0, freq = 52, lamb = 0)-> wili_cv_rmse
+  wili_CV_rmse4[[i]] <- wili_cv_rmse
+}
+for (i in 1:4){
+  print("Cross-validated RMSE for forecast horizon ")
+  print(i)
+  names(wili_CV_rmse4[[i]]) <- c("wili_jfk", "wili_ny_upstate")
+  print(unlist(wili_CV_rmse4[[i]]))
+}
+```
+
+We might want to try power transformation to transform our data and then apply seasonal differences. Possible choices include VARMA(1,1), VAR(2), VAR(3)
+```{r, include=TRUE}
+wili_lambda_s <- BoxCox.lambda(wili_flu_ts)
+wili_trans_ts <- BoxCox(wili_flu_ts, lambda = wili_lambda_s)
+wili_trans_ts %>% diff(lag = 52) %>% ur.kpss() %>% summary()
+wili_trans_ts %>% diff(lag = 52) -> wili_trans_ts_diff
+w_guess2 <- Eccm(wili_trans_ts_diff, maxp = 5, maxq = 6)
+VARorder(wili_trans_ts_diff,maxp = 5)
+```
+
+VAR(3):
+
+```{r, include=TRUE}
+wili_fit5 <- VAR(wili_trans_ts_diff, p = 3)
+
+wili_fc_5 <- VARpred(wili_fit5, h = 4)
+invert_fc(wili_fc_5$pred, wili_trans_ts, freq = 52, h = 4)->wili_fc5
+print("The forecasted values are ")
+print(InvBoxCox(wili_fc5, lambda = wili_lambda_s))
+CI_function(wili_fc_5$pred, wili_fc_5$se.err,h = 4, ts_frequency = 52, wili_flu_ts, lambda = wili_lambda_s)
+
+wili_CV_rmse5 <- list()
+for ( i in 1:4){
+  cross_valid(wili_flu_ts, window = 156, h = i, val_p = 3, val_q = 0, freq = 52, lamb = wili_lambda_s)-> wili_cv_rmse
+  wili_CV_rmse5[[i]] <- wili_cv_rmse
+}
+for (i in 1:4){
+  print("Cross-validated RMSE for forecast horizon ")
+  print(i)
+  names(wili_CV_rmse5[[i]]) <- c("wili_jfk", "wili_ny_upstate")
+  print(unlist(wili_CV_rmse5[[i]]))
+}
+```
+
+VAR(2)
+```{r, include=TRUE}
+wili_fit6 <- VAR(wili_trans_ts_diff, p = 2)
+
+wili_fc_6 <- VARpred(wili_fit6, h = 4)
+invert_fc(wili_fc_6$pred, wili_trans_ts, freq = 52, h = 4)->wili_fc6
+print("The forecasted values are ")
+print(InvBoxCox(wili_fc6, lambda = wili_lambda_s))
+CI_function(wili_fc_6$pred, wili_fc_6$se.err,h = 4, ts_frequency = 52, wili_flu_ts, lambda = wili_lambda_s)
+
+wili_CV_rmse6 <- list()
+for ( i in 1:4){
+  cross_valid(wili_flu_ts, window = 156, h = i, val_p = 2, val_q = 0, freq = 52, lamb = wili_lambda_s)-> wili_cv_rmse
+  wili_CV_rmse6[[i]] <- wili_cv_rmse
+}
+for (i in 1:4){
+  print("Cross-validated RMSE for forecast horizon ")
+  print(i)
+  names(wili_CV_rmse6[[i]]) <- c("wili_jfk", "wili_ny_upstate")
+  print(unlist(wili_CV_rmse6[[i]]))
+}
+```
+
+

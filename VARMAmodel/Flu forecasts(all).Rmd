@@ -1,0 +1,222 @@
+---
+title: "Flu Forecasting"
+author: "Minh Tam Hoang"
+date: "6/23/2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+Note: please embed functions that are required to run the codes below in the document if you want to knit this file.
+
+Flu forecasting results for the analysis of multivariate times series that include wiki_cough, wiki_cold, and wiki_influenza. VAR and VARMA models are utilized to predict the behaviour of flu in the next four weeks. Since cross-validations for VARMA models take a significant amount of time to return the results, I only write down the code for VARMA(2,1) for non-transformed data. However, I still comment out which VARMA models are recommended based on Ljung-Box statistics. 
+```{r, echo=FALSE}
+knitr::opts_chunk$set(error = TRUE)
+```
+
+
+
+```{r setup, include=TRUE}
+library(dplyr)
+library(forecast)
+library(smooth)
+library(MTS)
+library(urca)
+library(tidyverse)
+flu_data <- readRDS("data/ny_flu_wiki.rds")
+ts1 <- cbind.data.frame(flu_data[,4], flu_data[,5], flu_data[,6], flu_data[,7], flu_data[,8])
+flu_ts <- ts(ts1, start = c(2010, 40), end = c(2015,31), frequency = 52)
+autoplot(flu_ts)
+```
+
+
+```{r, include=TRUE}
+flu_ts%>% diff(lag = 52) -> flu_s
+flu_s %>% ur.kpss()%>% summary()
+stimulate <- Eccm(flu_s, maxp = 5, maxq = 6)
+VARorder(flu_s,maxp = 5)
+```
+Since seasonality exist in the series with a frequency of 52, seasonal difference is applied first.
+
+After that, Unit Root Test to determine whether another differencing is preformed.  Since the test statistic is smaller than 1% critical value, the series now is stationary.
+
+p-values from table of Extended Cross-correlation Matrices suggest a VAR(3). Other possible choices include VARMA(2,1) and VARMA(1,2).
+
+
+First, fit a VAR(3) model for seasonally differenced data (lag = 52)
+```{r, include=TRUE}
+fit1 <- VAR(flu_s, p = 3)
+
+fc_1 <- VARpred(fit1, h = 4)
+invert_fc(fc_1$pred, flu_ts, freq = 52, h = 4)->fc1
+print("The forecasted values are ")
+print(fc1)
+CI_function(fc_1$pred, fc_1$se.err,h = 4, ts_frequency = 52, flu_ts, lambda = 37)
+
+CV_rmse1 <- list()
+for ( i in 1:4){
+  cross_valid(flu_ts, window = 156, h = i, val_p = 3, val_q = 0, freq = 52, lamb = 37)->cv_rmse
+  CV_rmse1[[i]] <- cv_rmse
+}
+for (i in 1:4){
+  print("Cross-validated RMSE for forecast horizon ")
+  print(i)
+  names(CV_rmse1[[i]]) <- c("wili_jfk", "wili_ny_upstate", "wiki_cold", "wiki_cough", "wiki_influenza")
+  print(unlist(CV_rmse1[[i]]))
+}
+
+```
+
+Now, try a VARMA(2,1) model for seasonally differenced data (lag = 52)
+```{r, include = FALSE}
+fit2 <- VARMA(flu_s, p = 2, q = 1)
+
+
+fc_2 <- VARMApred(fit2, h = 4)
+invert_fc(fc_2$pred, flu_ts, freq = 52, h = 4)->fc2
+print("The forecasted values are ")
+print(fc2)
+CI_function(fc_2$pred, fc_2$se.err,h = 4, ts_frequency = 52, flu_ts, lambda = 37)
+  
+  
+
+CV_rmse2 <- list()
+for ( i in 1:4){
+  cross_valid(flu_ts, window = 156, h = i, val_p = 2, val_q = 1, freq = 52, lamb = 37)->cv_rmse
+  CV_rmse2[[i]] <- cv_rmse
+}
+for (i in 1:4){
+  print("Cross-validated RMSE for forecast horizon ")
+  print(i)
+  names(CV_rmse2[[i]]) <- c("wili_jfk", "wili_ny_upstate", "wiki_cold", "wiki_cough", "wiki_influenza")
+  print(unlist(CV_rmse2[[i]]))
+}
+```
+
+Although the data show variations that do not have any clear trend, transformation may be still useful in linearizing the data and equalizing the variances. First, I apply log transformation
+
+```{r, include=TRUE}
+transformed <- BoxCox(flu_ts, lambda = 0)
+transformed %>% diff(lag = 52)-> ts_trans
+guess <- Eccm(ts_trans, maxp = 5, maxq = 6)
+
+```
+As the data have a strong seasonal pattern, seasonal difference of lag 52 is done first. The test statistic is smaller than 2.5% crit value, therefore no differencing is needed. From p-values from two-way table, it is clear that VAR(2) and VAR(3) is recommended. VARMA(1,1) and VARMA(2,1) is also a possible choice.
+
+Fit VAR(2) first
+```{r, include= TRUE}
+trans_fit1 <- VAR(ts_trans, p = 2)## VAR(2)
+
+
+
+transfc_3 <- VARpred(trans_fit1, h = 4)
+invert_fc(transfc_3$pred, transformed, freq = 52, h = 4)->fc_trans
+print("The forecasted values are ")
+print(InvBoxCox(fc_trans, lambda = 0))
+CI_function(transfc_3$pred,transfc_3$se.err,h = 4, ts_frequency = 52, transformed, lambda = 0)
+  
+  
+
+CV_rmse4 <- list()
+for ( i in 1:4){
+  cross_valid(flu_ts, window = 156, h = i, val_p = 2, val_q = 0, freq = 52, lamb = 0)->cv_rmse
+  CV_rmse4[[i]] <- cv_rmse
+}
+for (i in 1:4){
+  print("Cross-validated RMSE for forecast horizon ")
+  print(i)
+  names(CV_rmse4[[i]]) <- c("wili_jfk", "wili_ny_upstate", "wiki_cold", "wiki_cough", "wiki_influenza")
+  print(unlist(CV_rmse4[[i]]))
+}
+
+
+```
+Then, try VAR(3)
+```{r, include=TRUE}
+trans_fit2 <- VAR(ts_trans, p = 3)## VAR(3)
+
+
+transfc_4 <- VARpred(trans_fit2, h = 4)
+invert_fc(transfc_4$pred, transformed, freq = 52, h = 4)->fc_trans_2
+print("The forecasted values are ")
+print(InvBoxCox(fc_trans_2, lambda = 0))
+CI_function(transfc_4$pred,transfc_4$se.err,h = 4, ts_frequency = 52, transformed, lambda = 0)
+
+
+CV_rmse5 <- list()
+for ( i in 1:4){
+  cross_valid(flu_ts, window = 156, h = i, val_p = 3, val_q = 0, freq = 52, lamb = 0)->cv_rmse
+  CV_rmse5[[i]] <- cv_rmse
+}
+for (i in 1:4){
+  print("Cross-validated RMSE for forecast horizon ")
+  print(i)
+  names(CV_rmse5[[i]]) <- c("wili_jfk", "wili_ny_upstate", "wiki_cold", "wiki_cough", "wiki_influenza")
+  print(unlist(CV_rmse5[[i]]))
+}
+
+
+```
+
+We might want to try power transformation to transform our data and then apply seasonal differences. Possible choices include VARMA(1,1), VAR(2), VAR(3)
+```{r, include=TRUE}
+lambda_s <- BoxCox.lambda(flu_ts)
+trans_ts <- BoxCox(flu_ts, lambda = lambda_s)
+trans_ts %>% diff(lag = 52) %>% ur.kpss() %>% summary()
+trans_ts %>% diff(lag = 52) -> trans_ts_diff
+guess2 <- Eccm(trans_ts_diff, maxp = 5, maxq = 6)
+```
+Try VAR(3)
+```{r, include=TRUE}
+trans_fit3 <- VAR(trans_ts_diff, p = 3)## 
+
+
+transfc_5 <- VARpred(trans_fit3, h = 4)
+invert_fc(transfc_5$pred, trans_ts, freq = 52, h = 4)->fc_t3
+print("The forecasted values are ")
+print(InvBoxCox(fc_t3, lambda = lambda_s))
+CI_function(transfc_5$pred,transfc_5$se.err,h = 4, ts_frequency = 52, trans_ts, lambda = lambda_s)
+
+
+CV_rmse6 <- list()
+for ( i in 1:4){
+  cross_valid(flu_ts, window = 156, h = i, val_p = 3, val_q = 0, freq = 52, lamb = lambda_s)->cv_rmse
+  CV_rmse6[[i]] <- cv_rmse
+}
+for (i in 1:4){
+  print("Cross-validated RMSE for forecast horizon ")
+  print(i)
+  names(CV_rmse6[[i]]) <- c("wili_jfk", "wili_ny_upstate", "wiki_cold", "wiki_cough", "wiki_influenza")
+  print(unlist(CV_rmse6[[i]]))
+}
+
+
+```
+
+Try VAR(2)
+```{r, include=TRUE}
+trans_fit4 <- VAR(trans_ts_diff, p = 2)## 
+
+
+transfc_6 <- VARpred(trans_fit4, h = 4)
+invert_fc(transfc_6$pred, trans_ts, freq = 52, h = 4)-> fc4
+print("The forecasted values are ")
+print(InvBoxCox(fc4, lambda = lambda_s))
+CI_function(transfc_6$pred,transfc_6$se.err,h = 4, ts_frequency = 52, trans_ts, lambda = lambda_s)
+
+
+
+CV_rmse7 <- list()
+for ( i in 1:4){
+  cross_valid(flu_ts, window = 156, h = i, val_p = 2, val_q = 0, freq = 52, lamb = lambda_s)->cv_rmse
+  CV_rmse7[[i]] <- cv_rmse
+}
+
+for (i in 1:4){
+  print("Cross-validated RMSE for forecast horizon ")
+  print(i)
+  names(CV_rmse7[[i]]) <- c("wili_jfk", "wili_ny_upstate", "wiki_cold", "wiki_cough", "wiki_influenza")
+  print(unlist(CV_rmse7[[i]]))
+}
+
+
+```
