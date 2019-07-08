@@ -2,9 +2,34 @@ library(dplyr)
 library(tidyr)
 library(purrr)
 library(MMWRweek)
+library(lubridate)
 source("R/delphi_epidata.R")
 
-# Function to fetch and combined data
+#' For each week specified by a vector of dates giving the week start dates,
+#' determine whether the week contains a specified date.
+#'
+#' @param week_start_date A vector of Date objects specifying the date of the first day in
+#' the weeks of interest
+#' @param year_to_pick integer or character giving the year to pick, e.g. "2010"
+#' @param month_to_pick integer or character giving the month to pick, e.g. "12"
+#' @param day_to_pick integer or character giving the day to pick, e.g. "22"
+#'
+#' @return a logical vector of the same length as time.  Entry i is TRUE if the
+#' week beginning on week_start_date[i] contains the date specified by
+#' year_to_pick, month_to_pick, and day_to_pick; FALSE otherwise.
+#'
+#' @export
+pick_week <- function(
+  week_start_date,
+  year_to_pick,
+  month_to_pick,
+  day_to_pick) {
+  date_to_pick <- lubridate::ymd(paste(year_to_pick, month_to_pick, day_to_pick, sep = "-"))
+  selTF <- (week_start_date >= date_to_pick - 6) & (week_start_date <= date_to_pick)
+  return(selTF)
+}
+
+# Function to fetch and combine data
 fetch_delphi_data_multi_issue <- function(
     source,
     regions = "nat",
@@ -127,6 +152,61 @@ all_obs <- fluview_data_nyc %>%
         wiki_common_cold,
         wiki_cough,
         wiki_influenza
+    ) %>% dplyr::mutate(
+      time = MMWRweek::MMWRweek2Date(year, week),
+      christmas_week = pick_week(
+        week_start_date = time,
+        year_to_pick = lubridate::year(time),
+        month_to_pick = "12",
+        day_to_pick = "25"),
+      postchristmas_week = pick_week(
+        week_start_date = time,
+        year_to_pick = lubridate::year(time),
+        month_to_pick = "1",
+        day_to_pick = "1") |
+        pick_week(
+          week_start_date = time,
+          year_to_pick = lubridate::year(time) + 1,
+          month_to_pick = "1",
+          day_to_pick = "1"),
+      thanksgiving_day = lubridate::year(time) %>%
+        splusTimeDate::holiday.Thanksgiving() %>%
+        as.character() %>%
+        strsplit(split = "/") %>%
+        `[[`(1) %>%
+        `[`(2) %>%
+        as.numeric(),
+      postthanksgiving_day = lubridate::year(time) %>%
+        splusTimeDate::holiday.Thanksgiving() %>%
+        `+`(7) %>%
+        as.character() %>%
+        strsplit(split = "/") %>%
+        `[[`(1) %>%
+        `[`(2) %>%
+        as.numeric(),
+      postthanksgiving_month = lubridate::year(time) %>%
+        splusTimeDate::holiday.Thanksgiving() %>%
+        `+`(7) %>%
+        as.character() %>%
+        strsplit(split = "/") %>%
+        `[[`(1) %>%
+        `[`(1) %>%
+        as.numeric(),
+      thanksgiving_week = pick_week(
+        week_start_date = time,
+        year_to_pick = lubridate::year(time),
+        month_to_pick = "11",
+        day_to_pick = thanksgiving_day),
+      postthanksgiving_week = pick_week(
+        week_start_date = time,
+        year_to_pick = lubridate::year(time),
+        month_to_pick = postthanksgiving_month,
+        day_to_pick = postthanksgiving_day)
+    ) %>% dplyr::select(
+      -thanksgiving_day,
+      -postthanksgiving_day,
+      -postthanksgiving_month
     )
+
 
 saveRDS(all_obs, file = "data/ny_flu_wiki.rds")
