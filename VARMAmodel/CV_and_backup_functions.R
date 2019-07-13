@@ -1,69 +1,14 @@
-# pred_var function fits an apppropriate model for multivariate time series and return h-step forecasts.
-#@param: y multivariate time series
-#@param: h forecast horizon
-#@param: val_p value of p
-#@param: val_q value of q
-#@return
-pred_var <- function(y, h, val_p, val_q) {
-  if (val_q == 0){
-    fitVAR <- VAR(y, p = val_p)
-    return(VARpred(fitVAR, h = h)$pred)
-  }
-  else if (val_p ==0){
-    fitVMA <- VMA(y, q = val_q)
-    return(VMApred(fitVMA, h = h)$pred)
-  }
-  else{
-    fitVARMA <- VARMA(y, p = val_p, q = val_q)
-    return(VARMApred(fitVARMA, h = h)$pred)
-  }
-  
-  
-}
-#model function performs differencing on time series if a valid value of frequency is passed and calls
-#pred_var function inside to fit an appropriate model for the series and return forecasts.
-#@paramL y multivariate ts
-#@param h forecast horizon
-#@param val_p: value of order p
-#@param val_q: value of order q
-#@param freq ts frequence
-#@param lambda tranformation param
-model <- function(y,h, val_p, val_q, freq, lambda){
-  y <- BoxCox_trans(y, lambda = lambda)
-  
-  if(freq != 0){
-    y %>% diff(lag = freq) -> y_diff
-    pred_var(y_diff,h, val_p, val_q)
-  }
-  else{
-    pred_var(y,h, val_p, val_q)
-  }
-}
 
-# BoxCox_trans returns a Box-Cox transformed time series if a valid lambda is passed.
-#@param y multivariate time series.
-#@param lambda transformation parameter.
-#@return
-
-BoxCox_trans <- function(y, lambda){
-  if (lambda != 37){
-    y <- BoxCox(y,lambda)
-    return (y)
-  }
-  return(y)
-}
-
-
-# Cross-valid function uses a series of training and test sets to calculate the forecast accuracy
-# measures(RMSE) on each test set (of each time series) and the results are averaged across all test sets (of each series).
-#This function is only available for multivariate time series using VAR,VARMA, and VMA model. Only first-order difference is available 
-#in this function.
-#@param: orig_ts original multivariate time series (must be ts object)
-#@param: window the minimum size of training set
-#@param: val_p value of order p
-#@param: val_q: value of order q
-#@param: freq. If the original time series needs differencing, enter the lag of interest. If no, enter 0
-#@param: lamb. If the original time series needs transforming, enter the value of lambda. If no, enter 37.
+#' Cross-valid function uses a series of training and test sets to calculate the forecast accuracy
+#' measures(RMSE) on each test set (of each time series) and the results are averaged across all test sets (of each series).
+#' This function is only available for multivariate time series using VAR,VARMA, and VMA model. Only first-order difference is available 
+#' in this function.
+#' @param: orig_ts original multivariate time series (must be ts object)
+#' @param: window the minimum size of training set
+#' @param: val_p value of order p
+#' @param: val_q: value of order q
+#' @param: freq. If the original time series needs differencing, enter the lag of interest. If no, enter 0
+#' @param: lamb. If the original time series needs transforming, enter the value of lambda. If no, enter 37.
 
 cross_valid <- function(orig_ts, window, h, val_p, val_q,freq, lamb){
   #create the indices for time series data splitting
@@ -114,6 +59,7 @@ cross_valid <- function(orig_ts, window, h, val_p, val_q,freq, lamb){
   
   tmp <- list()#####create a temporary list
   rmse <- matrix(nrow = length(test),ncol = ncol(orig_ts))#create a matrix to hold RMSE 
+  result <- matrix(0, nrow = h, ncol = ncol(orig_ts))
   for (i in 1: length(test)){
     test_lst[[i]] <- orig_ts[range(test[i])[1]: range(test[i])[2], 1:ncol(orig_ts)]##### list of test sets
     if(freq  > 0){
@@ -138,32 +84,25 @@ cross_valid <- function(orig_ts, window, h, val_p, val_q,freq, lamb){
     }  
   } 
   for(j in 1:length(tmp)){
-    tmp[[j]]-> n
-    for(k in 1:ncol(orig_ts)){
-      e <- n[[k]]
-      e^2 %>% mean(na.rm=TRUE) %>% sqrt() -> rmse[j,k]#####Compute the forecast accuracy measures RMSE of each test set
-      
-      
-    }
+    result <- result + (tmp[[j]])^2  #calculate MSE for each horizon
     
   }
-  for ( i in 1: ncol(rmse)){
-    avg_RMSE[[i]] <- mean(rmse[,i])#### averaging across all test sets
-  }
-  print("Do not care what appear before this line. I cannot make them disappear. We only need to consider the average RMSE below:")
-  print(avg_RMSE)
-  return(avg_RMSE)
+  
+  
+  RMSE <- sqrt(result/length(test))
+  
+  return(RMSE)
 }
 
 
 
 
-#invert_forecast function invert first-order differenced forecasts of a series of training  sets
-#@param pred_lst a list containing first-order differenced forecasts of a series of training sets
-#@param train_lst a list containg a series of training data set
-#@param  freq  ts_frequency
-#@param  h forecast horizon
-#@return
+#' invert_forecast function invert first-order differenced forecasts of a series of training  sets
+#' @param pred_lst a list containing first-order differenced forecasts of a series of training sets
+#' @param train_lst a list containg a series of training data set
+#' @param freq  ts_frequency
+#' @param h  forecast horizon
+#' @return time series at original scales
 invert_forecast <- function(pred_lst, train_lst, freq, h){
   lst <- list()
   for ( i in 1: length(pred_lst)){
@@ -179,11 +118,11 @@ invert_forecast <- function(pred_lst, train_lst, freq, h){
   return(lst)
 }
 
-#@invert_fc function invert first-ordered differenced forecasts
-#@param dy first-ordered differenced forecasts
-#@param y original time series
-#@param freq ts- frequency
-#@param h forecast horizon
+#' invert_fc function invert first-ordered differenced forecasts
+#' @param dy first-ordered differenced forecasts
+#' @param y original time series
+#' @param freq ts- frequency
+#' @param h forecast horizon
 
 invert_fc <- function(dy,y,freq,h){
   if (h > 1){
@@ -193,3 +132,60 @@ invert_fc <- function(dy,y,freq,h){
     orig_fc <- dy + y[(nrow(y) - freq + 1), 1: ncol(y)]
   }
 }
+
+
+#' pred_var function fits an apppropriate model for multivariate time series and return h-step forecasts.
+#' @param: y multivariate time series
+#' @param: h forecast horizon
+#' @param: val_p value of p
+#' @param: val_q value of q
+#' @return: h-step forecast
+pred_var <- function(y, h, val_p, val_q) {
+  if (val_q == 0){
+    fitVAR <- VAR(y, p = val_p)
+    return(VARpred(fitVAR, h = h)$pred)
+  }
+  else if (val_p ==0){
+    fitVMA <- VMA(y, q = val_q)
+    return(VMApred(fitVMA, h = h)$pred)
+  }
+  else{
+    fitVARMA <- VARMA(y, p = val_p, q = val_q)
+    return(VARMApred(fitVARMA, h = h)$pred)
+  }
+  
+  
+}
+#' model function performs differencing on time series if a valid value of frequency is passed and calls
+#' pred_var function inside to fit an appropriate model for the series and return forecasts.
+#' @paramL y multivariate ts
+#' @param h forecast horizon
+#' @param val_p: value of order p
+#' @param val_q: value of order q
+#' @param freq ts frequence
+#' @param lambda tranformation param
+model <- function(y,h, val_p, val_q, freq, lambda){
+  y <- BoxCox_trans(y, lambda = lambda)
+  
+  if(freq != 0){
+    y %>% diff(lag = freq) -> y_diff
+    pred_var(y_diff,h, val_p, val_q)
+  }
+  else{
+    pred_var(y,h, val_p, val_q)
+  }
+}
+
+#' BoxCox_trans returns a Box-Cox transformed time series if a valid lambda is passed.
+#' @param y multivariate time series.
+#' @param lambda transformation parameter.
+#' @return transformed y
+
+BoxCox_trans <- function(y, lambda){
+  if (lambda != 37){
+    y <- BoxCox(y,lambda)
+    return (y)
+  }
+  return(y)
+}
+
