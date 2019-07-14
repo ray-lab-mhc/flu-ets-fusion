@@ -4,9 +4,9 @@
 #' models.
 
 #' @param: orig_ts original multivariate time series (must be ts object)
-#' @param: missing- TRUE if there is one observation of wiki data than of non-wiki data
-#' @param: is_dummy
-#' @param: dummy - dummy variables(e.g: holiday effects) in the form of ts object. 0 if no dummny variables needed
+#' @param: missing- TRUE if there is one more observation of wiki data than of non-wiki data
+#' @param: is_dummy. "no" if there is no dummy variables in the model.
+#' @param: dummy - dummy variables(e.g: holiday effects) in the form of ts object. 1 if no dummny variables needed
 #' @param: window the minimum size of training set
 #' @param: horizon the size of each test set
 #' @param: level. 1 for local level model and 0 for only seasonal component
