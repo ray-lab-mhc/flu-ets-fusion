@@ -1,4 +1,4 @@
-## A collection of updating functions that are required for cross-validation
+## A collection of updating functions that are required for the estimation of parameters.
 
 ## 1) Local level + Cycle(52)
 
