@@ -2,7 +2,6 @@
 #' measures(RMSE) on each test set (of each time series) and the results are averaged across all test sets (of each series).
 #' This CV procedure is available for multivariate time series using exponential smoothing 
 #' models.
-
 #' @param: orig_ts original multivariate time series (must be ts object)
 #' @param: missing- TRUE if there is one more observation of wiki data than of non-wiki data
 #' @param: is_dummy. "no" if there is no dummy variables in the model.
@@ -38,6 +37,7 @@ CV_es <- function(orig_ts,missing, is_dummy, dummy, window, horizon, seasonal,cy
     }
     if(missing == TRUE){
       train_lst[[i]][nrow(train_lst[[i]]), 1:2] <- NA #omit the last observations of ili data
+      
     }
   }
   
@@ -45,15 +45,16 @@ CV_es <- function(orig_ts,missing, is_dummy, dummy, window, horizon, seasonal,cy
   #fit a desired model on each training set and predict h-step forecasts  
   for ( i in 1: length(train_lst)){
     
-    pred_list[[i]] <- model(y = train_lst[[i]], h = horizon, seasonal= seasonal,cycle = cycle,is_dummy = is_dummy, dummy = dummy_lst[[i]], inits = inits,freq = freq, update_func = update_func, lambda = lamb)
+    pred_list[[i]] <- model(y = train_lst[[i]], h = horizon, missing = missing, seasonal= seasonal,cycle = cycle,is_dummy = is_dummy, dummy = dummy_lst[[i]], inits = inits,freq = freq, update_func = update_func, lambda = lamb)
   }
   
   
   ##convert the forecasts into the original scale
   
-  if(lamb != 37){  
-    fc_trans <- undo_BoxCox(horizon = horizon, pred = pred_list, lambda = lamb)
-  }
+  ##if(lamb != 37){  
+  ## fc_trans <- undo_BoxCox(horizon = horizon, pred = pred_list, lambda = lamb)
+  ## print(fc_trans)
+  ##}
   
   
   
@@ -62,18 +63,15 @@ CV_es <- function(orig_ts,missing, is_dummy, dummy, window, horizon, seasonal,cy
   result <- matrix(0, nrow = horizon, ncol = ncol(orig_ts))
   for (i in 1: length(test)){
     test_lst[[i]] <- orig_ts[range(test[i])[1]: range(test[i])[2], 1:ncol(orig_ts)] # list of test sets
-    if(lamb != 37){ #for transformed ts
-      test_lst[[i]] - fc_trans[[i]] -> error # compute the errors(residuals)
-      tmp[[i]] <- error
-    } else{
-      if( horizon == 1){
+   
+    if( horizon == 1){
         test_lst[[i]] - as.data.frame(pred_list[[i]]) -> error # compute the errors(residuals)
         tmp[[i]] <- error  
-      } else{
-        as.data.frame(test_lst[i]) - as.data.frame(pred_list[[i]]) -> error # compute the errors for the forecast observations(residuals)
+      }else{
+        as.data.frame(test_lst[i]) - pred_list[[i]] -> error # compute the errors for the forecast observations(residuals)
         tmp[[i]] <- error  
       }
-    }  
+     
   } 
   
   for(j in 1:length(tmp)){
@@ -104,7 +102,7 @@ CV_es <- function(orig_ts,missing, is_dummy, dummy, window, horizon, seasonal,cy
 #' @param: update_func updating function to update the model given the parameters
 #' @return: return h-step forecasts
 
-pred_mod <- function(y, horizon, seasonal,cycle, inits,freq, update_func) {
+pred_mod <- function(y, horizon,missing, seasonal,cycle, inits,freq, update_func,lambda) {
   
   # local level model
   if(seasonal == "trig"){
@@ -136,7 +134,14 @@ pred_mod <- function(y, horizon, seasonal,cycle, inits,freq, update_func) {
   fit_opt <- optim(p = inits, f = update_func,
                    method = "L-BFGS-B", model = fit_model)
   model_optim <- update_func(fit_opt$par,fit_model, estimate = FALSE)
-  pred_test <- predict(model_optim, n.ahead = horizon)
+  pred_test <- as.data.frame(predict(model_optim, n.ahead = horizon))
+  
+  if(missing == TRUE){ ## set up forecasts in the case of extra observations in wiki data
+    pred_test <- extra(model = model_optim, horizon = horizon, y = y, pred_test = pred_test)
+  }
+  if(lambda != 37){
+    pred_test <- InvBoxCox(pred_test, lambda)## undo BoxCox transformation if necessary
+  }
   return (pred_test)
 }
 
@@ -154,14 +159,15 @@ pred_mod <- function(y, horizon, seasonal,cycle, inits,freq, update_func) {
 #' @param: lamb. If the original time series needs transforming, enter the value of lambda. If no, enter 37.
 #' @param: inits initial values for covariance structures
 #' @param: update_func updating function to update the model given the parameters
-model <- function(y, h, seasonal,cycle,is_dummy, dummy, inits,freq, update_func, lambda){
+model <- function(y, h, missing,seasonal,cycle,is_dummy, dummy, inits,freq, update_func, lambda){
   if(lambda != 37){
     y <- BoxCox(y, lambda = lambda)
+    print(y)
   }
   if(is_dummy == "no"){
-    pred_mod(y, h, seasonal = seasonal,cycle = cycle, inits = inits,freq = freq, update_func = update_func) 
+    pred_mod(y, h,missing, seasonal = seasonal,cycle = cycle, inits = inits,freq = freq, update_func = update_func, lambda = lambda) 
   }else{
-    dummy_mod(y,h,seasonal = seasonal, cycle = cycle, dummy = dummy, inits = inits, freq = freq, update_func = update_func)
+    dummy_mod(y,h, missing,seasonal = seasonal, cycle = cycle, dummy = dummy, inits = inits, freq = freq, update_func = update_func, lambda = lambda)
   }
 }
 
@@ -176,28 +182,29 @@ undo_BoxCox <- function(horizon, pred, lambda){
   fc <- data.frame(matrix(nrow = horizon, length(pred)))
   
   for (i in 1:length(pred)){
-    fc[[i]] <- InvBoxCox(as.data.frame(pred[[i]]), lambda = lambda) 
+    fc[[i]] <- InvBoxCox(pred[[i]], lambda = lambda) 
   }
   return(fc)
 }
 
 #' dummy_mod function fits a desired model with dummy variables for multivariate time series . 
 #' Note: only available for one dummy variable. You may need to write your own dummy_mod function if more than one dummy variable are used.
-#' @param: y multivariate time series
-#' @param: dummy - dummy variables
-#' @param: h forecast horizon
-#' @param: level. 1 for local level model and 0 for only seasonal component
-#' @param: seasonal.  
-#' @param: freq. the frequency of time series
-#' @param: lamb. If the original time series needs transforming, enter the value of lambda. If no, enter 37.
-#' @param: inits initial values for covariance structures
-#' @param: update_func updating function to update the model given the parameters
-#' @return: return h-step forecasts
+#' @param y multivariate time series
+#' @param dummy - dummy variables
+#' @param missing
+#' @param h forecast horizon
+#' @param level. 1 for local level model and 0 for only seasonal component
+#' @param seasonal.  
+#' @param freq. the frequency of time series
+#' @param lamb. If the original time series needs transforming, enter the value of lambda. If no, enter 37.
+#' @param inits initial values for covariance structures
+#' @param update_func updating function to update the model given the parameters
+#' @return return h-step forecasts
 
 
 
 
-dummy_mod <- function(y,dummy,horizon, seasonal,cycle, inits,freq, update_func) {
+dummy_mod <- function(y,horizon, missing, seasonal,cycle,dummy, inits,freq, update_func, lambda) {
   d <- cbind.data.frame(y ,dummy)
   fc <- ts(matrix(NA, nrow = horizon, ncol = ncol(y)), frequency = freq)
   if(seasonal == "trig"){
@@ -263,8 +270,37 @@ dummy_mod <- function(y,dummy,horizon, seasonal,cycle, inits,freq, update_func) 
     }
   }
   
-  pred_test <- predict(model_optim, newdata = new_data)
+  pred_test <- as.data.frame(predict(model_optim, newdata = new_data))
+  if(missing == TRUE){
+    pred_test <- extra(model = model_optim, horizon = horizon, y = y, pred_test = pred_test)
+  }
+  if(lambda != 37){
+      pred_test <- InvBoxCox(pred_test, lambda)
+    }
   return (pred_test)
 }
 
+#' extra function returns the h-step forecasts in the case of extra observations for wiki-data
+#' @param model  state-space model
+#' @param horizon
+#' @param y original time series(observations)
+#' @param pred_test: forecasts produced from predict function 
 
+
+extra <- function(model, horizon, y, pred_test){
+  pred_test1 <- matrix(0, nrow = horizon, ncol = ncol(y))
+  fitted_val <- fitted(model)
+  fc_h1 <- fitted_val[nrow(fitted_val),]# obtain the fitted values  at time t (~ forecast at h = 1)
+  
+  for (i in 1: ncol(y)){
+    pred_test1[1, i] <- fc_h1[i]
+}
+  for ( i in 2:horizon){
+    for(j in 1:ncol(y)){
+      pred_test1[i, j] <- pred_test[i-1, j] # forecasts at h = 2,3,4,...
+    
+  }
+}
+  
+  return (pred_test1)
+}
