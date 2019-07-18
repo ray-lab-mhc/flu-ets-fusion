@@ -52,7 +52,7 @@ update_function <- function(model_fit, alpha_t,xmas_week){
 
 
 #' when_is_xmas function returns a list of christmas week from a given data frame 
-#' @param xmas_cov data frame(or ts) of regression models(e.g xmas)
+#' @param xmas_cov data frame(or ts) of regression variables(e.g xmas).
 #' @return xmas_week 
 when_is_xmas<- function(xmas_cov){
   xmas_week <- list()
