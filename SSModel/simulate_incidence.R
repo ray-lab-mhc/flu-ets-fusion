@@ -3,8 +3,8 @@
 #' @param model_fit
 #' @param horizon
 #' @param n number of paths to simulate n
-#' @param dummy a data frame(or ts) of only regression variables
-#' @return A (number of time series) by h by n array of sampled incidence.
+#' @param dummy a data frame(or ts) of regression variables only.
+#' @return A horizon x n x num_ts array of sampled incidence.
 
 
 simulate_incidence <- function(model_fit,horizon, n, num_ts, dummy){
