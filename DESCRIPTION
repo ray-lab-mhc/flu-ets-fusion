@@ -1,0 +1,19 @@
+Package: fluETS
+Title: Exponential smoothing models for influenza
+Version: 0.0.0.9000
+Authors@R: c(
+    person("Minh Tam", "Hoang", , "", c("aut")),
+    person("Evan", "Ray", , "eray@mtholyoke.edu", c("aut", "cre")))
+Description: Fitting and forecasting from exponential smoothing model for influenza.
+Depends:
+    R (>= 3.0.2)
+Imports:
+    KFAS,
+    mvtnorm
+License: GPL
+LazyData: true
+Suggests:
+    knitr,
+    testthat
+VignetteBuilder: knitr
+RoxygenNote: 6.1.1
