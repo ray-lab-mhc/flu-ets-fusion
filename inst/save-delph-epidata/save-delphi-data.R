@@ -115,36 +115,19 @@ fluview_data <- fetch_delphi_data_multi_issue(
   #    regions = c("ny", "jfk", "ny_minus_jfk"),
   regions = location_codes,
   issues = all_issues,
-  epiweeks_range = c(201040, 201530))
+  epiweeks_range = c(201040, 201930))
 
 fluview_data_wide <- fluview_data %>%
-  filter(issue == 201740) %>%
+  group_by(region, epiweek) %>%
+  filter(issue == max(issue)) %>%
+  ungroup() %>%
   select(region, epiweek, wili) %>%
   spread(key = "region", value = "wili")
 names(fluview_data_wide) <- c("epiweek", paste0("wili_", names(fluview_data_wide)[-1]))
 
-fluview_data_nyc <- fetch_delphi_data_multi_issue(
-    source = "fluview",
-#    regions = c("ny", "jfk", "ny_minus_jfk"),
-    regions = c("jfk"),
-    issues = all_issues,
-    epiweeks_range = c(201040, 201530))
-
-fluview_data_ny_upstate <- fetch_delphi_data_multi_issue(
-    source = "fluview",
-#    regions = c("ny", "jfk", "ny_minus_jfk"),
-    regions = c("ny_minus_jfk"),
-    issues = all_issues,
-    epiweeks_range = c(201040, 201530))
-
-#twitter_data_ny <- fetch_delphi_data_multi_issue(
-#    source = "twitter",
-#    regions = c("ny"),
-#    epiweeks_range = c(201040, 201530))
-
 wiki_data <- fetch_delphi_data_multi_issue(
     source = "wiki",
-    epiweeks_range = c(201040, 201530))
+    epiweeks_range = c(201040, 201930))
 
 all_obs <- fluview_data_wide %>%
     left_join(
