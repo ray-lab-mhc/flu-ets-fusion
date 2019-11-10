@@ -103,55 +103,42 @@ all_issues <- expand.grid(
 #all_issues <- all_issues[all_issues >= 201510 & all_issues <= 201530]
 #all_issues <- all_issues[all_issues >= 200040 & all_issues <= 201530]
 
-fluview_data_nyc <- fetch_delphi_data_multi_issue(
-    source = "fluview",
-#    regions = c("ny", "jfk", "ny_minus_jfk"),
-    regions = c("jfk"),
-    issues = all_issues,
-    epiweeks_range = c(201040, 201530))
+location_codes <- c(
+  'al', 'ak', 'az', 'ar', 'ca', 'co', 'ct', 'de', 'fl', 'ga', 'hi', 'id', 'il',
+  'in', 'ia', 'ks', 'ky', 'la', 'me', 'md', 'ma', 'mi', 'mn', 'ms', 'mo', 'mt',
+  'ne', 'nv', 'nh', 'nj', 'nm', 'ny_minus_jfk', 'nc', 'nd', 'oh', 'ok', 'or',
+  'pa', 'ri', 'sc', 'sd', 'tn', 'tx', 'ut', 'vt', 'va', 'wa', 'wv', 'wi', 'wy',
+  'as', 'mp', 'dc', 'gu', 'pr', 'vi', 'ord', 'lax', 'jfk')
 
-fluview_data_ny_upstate <- fetch_delphi_data_multi_issue(
-    source = "fluview",
-#    regions = c("ny", "jfk", "ny_minus_jfk"),
-    regions = c("ny_minus_jfk"),
-    issues = all_issues,
-    epiweeks_range = c(201040, 201530))
+fluview_data <- fetch_delphi_data_multi_issue(
+  source = "fluview",
+  #    regions = c("ny", "jfk", "ny_minus_jfk"),
+  regions = location_codes,
+  issues = all_issues,
+  epiweeks_range = c(201040, 201930))
 
-#twitter_data_ny <- fetch_delphi_data_multi_issue(
-#    source = "twitter",
-#    regions = c("ny"),
-#    epiweeks_range = c(201040, 201530))
+fluview_data_wide <- fluview_data %>%
+  group_by(region, epiweek) %>%
+  filter(issue == max(issue)) %>%
+  ungroup() %>%
+  select(region, epiweek, wili) %>%
+  spread(key = "region", value = "wili")
+names(fluview_data_wide) <- c("epiweek", paste0("wili_", names(fluview_data_wide)[-1]))
 
-wiki_data_ny <- fetch_delphi_data_multi_issue(
+wiki_data <- fetch_delphi_data_multi_issue(
     source = "wiki",
-    epiweeks_range = c(201040, 201530))
+    epiweeks_range = c(201040, 201930))
 
-all_obs <- fluview_data_nyc %>%
-    filter(issue == 201740) %>%
-    transmute(
-        epiweek = epiweek,
-        wili_jfk = wili
-    ) %>%
+all_obs <- fluview_data_wide %>%
     left_join(
-        fluview_data_ny_upstate %>%
-        filter(issue == 201740) %>%
-        transmute(
-            epiweek = epiweek,
-            wili_ny_upstate = wili
-        )
-    ) %>%
-    left_join(
-        wiki_data_ny
+        wiki_data
     ) %>%
     select(
         epiweek,
         year,
         week,
-        wili_jfk,
-        wili_ny_upstate,
-        wiki_common_cold,
-        wiki_cough,
-        wiki_influenza
+        starts_with("wili_"),
+        starts_with("wiki_")
     ) %>% dplyr::mutate(
       time = MMWRweek::MMWRweek2Date(year, week),
       christmas_week = pick_week(
@@ -209,4 +196,4 @@ all_obs <- fluview_data_nyc %>%
     )
 
 
-saveRDS(all_obs, file = "data/ny_flu_wiki.rds")
+saveRDS(all_obs, file = "data/all_locations_flu_wiki.rds")
