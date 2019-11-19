@@ -43,6 +43,19 @@ create_SSMmodel <- function(
   return_optim_args = FALSE) {
   p <- ncol(ts_data)
   
+  if (sum(is.na(ts_data)) > 0){
+    print("true")
+    start_date <- start(ts_data)
+    ts_frequency <- frequency((ts_data))
+    ts_data <- as.data.frame(ts_data)
+    ts_data <- ts_data %>%
+      filter_all(all_vars(!is.na(.)))
+    ts_data <- ts(ts_data, start = start_date, frequency = ts_frequency)
+    print(ts_data)
+  } 
+  
+  
+  
   if(missing(init_value_Q)){
     init_pars <- NULL
   }else{
